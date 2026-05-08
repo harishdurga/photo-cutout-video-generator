@@ -1,0 +1,87 @@
+# Photo Cutout Video Generator
+
+A highly customizable, programmatic video generator that creates stunning vertical photo montages. It takes a collection of photos and a background image, and creates a "cutout" effect (like a giant number or letter etched into a wall) where your photos populate behind the cutout in a dense grid. It also applies a cinematic fluorescent "tubelight" flicker effect to the photos as they pop in!
+
+Perfect for creating aesthetic anniversary videos, birthday reels, or customized status updates for Instagram, WhatsApp, and TikTok.
+
+## Features
+- **Dynamic Cutout Masks**: Specify any text or number (e.g., "3") to be cut out of the background.
+- **Tubelight Flicker Animation**: Photos pop into the grid with a cool, randomized fluorescent blinking effect.
+- **EXIF Auto-Correction**: Automatically rotates portrait/landscape photos correctly based on EXIF data.
+- **Fully Configurable**: Tweak grid sizes, gaps, text formatting, blur radius, frame rates, and more using a simple JSON file or CLI arguments.
+- **Custom Fonts**: Drop in any `.ttf` file to customize the cutout shape or the overlaid text.
+
+## Installation
+
+1. Ensure you have [Python 3.7+](https://www.python.org/) installed.
+2. Install the required Python dependencies:
+   ```bash
+   pip install pillow moviepy numpy
+   ```
+
+## Usage
+
+The easiest way to use the generator is by passing a JSON configuration file:
+
+```bash
+python make_anniversary_video.py --config config.json
+```
+
+You can also override any specific setting directly via the command line:
+```bash
+python make_anniversary_video.py --config config.json --number "5" --text "Happy\nBirthday"
+```
+
+## Configuration Options
+
+Below is the list of all available options you can define in your `config.json` file (or pass as CLI arguments):
+
+| Option | Type | Description |
+| :--- | :--- | :--- |
+| `image_dir` | string | Directory containing the pictures to be used in the background grid. |
+| `bg_image` | string | The image file to use for the blurred foreground "wall". Must be located in `image_dir`. |
+| `output` | string | The name and path of the generated MP4 file (e.g., `video.mp4`). |
+| `width` | integer | The width of the generated video (default: `1080`). |
+| `height` | integer | The height of the generated video (default: `1920`). |
+| `fps` | integer | Frames per second for the video (default: `30`). |
+| `appear_interval` | float | Time in seconds between each photo appearing in the grid (default: `0.2`). |
+| `hold_duration` | float | Time in seconds to hold the video after the final photo appears (default: `3.0`). |
+| `square_size` | integer | Width/height in pixels of each photo tile in the background grid. |
+| `gap` | integer | Space in pixels between each photo tile in the grid. |
+| `grid_cols` | integer | Number of columns in the photo grid. |
+| `grid_rows` | integer | Number of rows in the photo grid. |
+| `font_number` | string | Path to the `.ttf` font file used for the massive cutout mask. |
+| `font_number_size`| integer | Font size for the massive cutout mask (e.g., `1500`). |
+| `font_text` | string | Path to the `.ttf` font file used for the bottom text. |
+| `font_text_size` | integer | Font size for the bottom text. |
+| `number` | string | The character(s) or text to cut out from the center of the wall. |
+| `text` | string | The text to draw at the bottom of the video. Use `\n` to insert line breaks. |
+| `text_color` | string | Hex code for the bottom text color (e.g., `#FFB7CE`). |
+| `blur_radius` | integer | Gaussian blur radius applied to the background wall (default: `10`). |
+
+## Example `config.json`
+
+```json
+{
+    "image_dir": "pictures",
+    "bg_image": "DSC_0073.JPG",
+    "output": "custom_anniversary_video.mp4",
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "appear_interval": 0.2,
+    "hold_duration": 3.0,
+    "square_size": 215,
+    "gap": 5,
+    "grid_cols": 6,
+    "grid_rows": 6,
+    "font_number": "AlfaSlabOne-Regular.ttf",
+    "font_number_size": 1500,
+    "font_text": "fonts\\Lavishly_Yours\\LavishlyYours-Regular.ttf",
+    "font_text_size": 108,
+    "number": "3",
+    "text": "Happy\nAnniversary\nTo Us",
+    "text_color": "#FFB7CE",
+    "blur_radius": 10
+}
+```
