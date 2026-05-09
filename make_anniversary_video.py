@@ -65,7 +65,7 @@ def load_config(args):
         "text_color": "#FFB7CE",
         "blur_radius": 10,
         "cutout_border_color": "#FFB7CE",
-        "cutout_border_width": 10,
+        "cutout_border_width": 0,
         "svg_file": None
     }
 
@@ -156,11 +156,14 @@ def create_background_mask(config):
             # svglib/renderPM defaults to a white background. By inverting, 
             # white background becomes 0 (transparent), and dark shapes become 255 (opaque).
             alpha_channel = ImageOps.invert(svg_img.convert('L'))
+            bbox = alpha_channel.getbbox()
+            if bbox:
+                alpha_channel = alpha_channel.crop(bbox)
             
-            # Scale SVG to fit nicely in the center. Similar to the text size, let's say max 80% of width, 50% of height.
-            max_w, max_h = video_size[0] * 0.8, video_size[1] * 0.5
-            scale = min(max_w / svg_img.width, max_h / svg_img.height)
-            new_size = (int(svg_img.width * scale), int(svg_img.height * scale))
+            # Scale SVG to fit nicely in the center. Similar to the text size, let's say max 85% of width, 65% of height.
+            max_w, max_h = video_size[0] * 0.85, video_size[1] * 0.65
+            scale = min(max_w / alpha_channel.width, max_h / alpha_channel.height)
+            new_size = (int(alpha_channel.width * scale), int(alpha_channel.height * scale))
             alpha_channel = alpha_channel.resize(new_size, Image.Resampling.LANCZOS)
             
             x_num = int((video_size[0] - new_size[0]) / 2)
@@ -306,6 +309,10 @@ def main():
             x_pos = start_x + col * (square_size + gap)
             y_pos = start_y + row * (square_size + gap)
             
+            # Fix MoviePy bug: CompositeVideoClip crashes if a clip is completely off-screen
+            if x_pos + square_size <= 0 or y_pos + square_size <= 0 or x_pos >= video_size[0] or y_pos >= video_size[1]:
+                continue
+                
             start_time = i * config["appear_interval"]
             
             # TUBELIGHT FLICKER EFFECT
