@@ -2,6 +2,9 @@ import os
 import random
 import argparse
 import json
+import tempfile
+import atexit
+import shutil
 from PIL import Image, ImageFilter, ImageDraw, ImageFont, ImageOps
 from moviepy import ImageClip, CompositeVideoClip, ColorClip
 
@@ -30,6 +33,8 @@ def parse_arguments():
     parser.add_argument("--text", type=str, help="The text at the bottom. Use \\n for newlines.")
     parser.add_argument("--text-color", type=str, help="Color of the text")
     parser.add_argument("--blur-radius", type=int, help="Background blur radius")
+    parser.add_argument("--cutout-border-color", type=str, help="Color of the cutout border")
+    parser.add_argument("--cutout-border-width", type=int, help="Width of the cutout border")
 
     return parser.parse_args()
 
@@ -55,7 +60,9 @@ def load_config(args):
         "number": "3",
         "text": "Happy\nAnniversary",
         "text_color": "#FFB7CE",
-        "blur_radius": 10
+        "blur_radius": 10,
+        "cutout_border_color": "#FFB7CE",
+        "cutout_border_width": 10
     }
 
     # Load JSON config if provided
@@ -72,6 +79,15 @@ def load_config(args):
         if value is not None and key != 'config':
             # Map argparse names to config names (e.g., image_dir)
             config[key] = value
+
+    # Resolve paths relative to the config file's directory to make it robust across OS and working directories
+    if args.config:
+        config_dir = os.path.dirname(os.path.abspath(args.config))
+        path_keys = ['image_dir', 'font_number', 'font_text']
+        for k in path_keys:
+            if k in config and config[k] and not os.path.isabs(config[k]):
+                config[k] = os.path.join(config_dir, config[k])
+        # Note: bg_image is loaded relative to image_dir, so we don't need to resolve it here
 
     return config
 
@@ -143,6 +159,12 @@ def create_background_mask(config):
     # Handle multiline cutout text if necessary
     mask_draw.multiline_text((x_num, y_num), text_number, font=font_large, fill=0, align="center")
 
+    if config.get("cutout_border_width", 0) > 0:
+        border_color = config.get("cutout_border_color", "#FFB7CE")
+        # Multiply by 2 because Pillow's stroke is centered, and the inner half will be cut out by the mask
+        border_width = config["cutout_border_width"] * 2 
+        img_draw.multiline_text((x_num, y_num), text_number, font=font_large, fill=(0,0,0), stroke_width=border_width, stroke_fill=border_color, align="center")
+
     # Draw bottom text
     raw_text = str(config["text"]).replace('\\n', '\n')
     lines = raw_text.split('\n')
@@ -186,9 +208,18 @@ def main():
     for k, v in config.items():
         print(f"  {k}: {v}")
         
+    # Ensure output directory exists so video saving doesn't fail
+    out_dir = os.path.dirname(os.path.abspath(config["output"]))
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+
+    # Use a secure temporary directory that auto-cleans on exit
+    temp_dir = tempfile.mkdtemp()
+    atexit.register(lambda: shutil.rmtree(temp_dir, ignore_errors=True))
+
     print("\nPreparing cutout background...")
     bg_img = create_background_mask(config)
-    bg_path_temp = "temp_bg_mask.png" 
+    bg_path_temp = os.path.join(temp_dir, "temp_bg_mask.png")
     bg_img.save(bg_path_temp)
     
     grid_cols = config["grid_cols"]
@@ -220,8 +251,6 @@ def main():
     # Match the shift of the cutout (-300 upwards offset)
     start_y = (video_size[1] - total_grid_height) // 2 - 300 
     
-    temp_files = []
-    
     for i, (col, row) in enumerate(grid_coords):
         img_path = photo_paths[i]
         
@@ -230,9 +259,8 @@ def main():
             img = ImageOps.exif_transpose(img) # EXIF Fix
             img = img.convert("RGB")
             img = center_crop(img, square_size, square_size)
-            temp_name = f"temp_sq_{i}.jpg"
+            temp_name = os.path.join(temp_dir, f"temp_sq_{i}.jpg")
             img.save(temp_name)
-            temp_files.append(temp_name)
             
             x_pos = start_x + col * (square_size + gap)
             y_pos = start_y + row * (square_size + gap)
@@ -271,13 +299,6 @@ def main():
     final_video = CompositeVideoClip(clips, size=video_size)
     final_video.write_videofile(config["output"], fps=config["fps"], codec="libx264", audio=False)
     
-    print("Cleaning up temporary files...")
-    if os.path.exists(bg_path_temp):
-        os.remove(bg_path_temp)
-    for f in temp_files:
-        if os.path.exists(f):
-            os.remove(f)
-            
     print(f"\nDone! Your video is ready at: {os.path.abspath(config['output'])}")
 
 if __name__ == "__main__":
