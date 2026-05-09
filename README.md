@@ -5,7 +5,8 @@ A highly customizable, programmatic video generator that creates stunning vertic
 Perfect for creating aesthetic anniversary videos, birthday reels, or customized status updates for Instagram, WhatsApp, and TikTok.
 
 ## Features
-- **Dynamic Cutout Masks**: Specify any text or number (e.g., "3") to be cut out of the background.
+- **Dynamic Cutout Masks**: Specify any text, number (e.g., "3"), or provide an SVG file to be cut out of the background.
+- **Customizable Borders**: Add a colored outline around your text or SVG cutouts to make them pop.
 - **Tubelight Flicker Animation**: Photos pop into the grid with a cool, randomized fluorescent blinking effect.
 - **EXIF Auto-Correction**: Automatically rotates portrait/landscape photos correctly based on EXIF data.
 - **Fully Configurable**: Tweak grid sizes, gaps, text formatting, blur radius, frame rates, and more using a simple JSON file or CLI arguments.
@@ -14,9 +15,9 @@ Perfect for creating aesthetic anniversary videos, birthday reels, or customized
 ## Installation
 
 1. Ensure you have [Python 3.7+](https://www.python.org/) installed.
-2. Install the required Python dependencies:
+2. If using `uv`, the dependencies are managed for you. Otherwise, install the required Python dependencies:
    ```bash
-   pip install pillow moviepy numpy
+   pip install pillow moviepy numpy svglib reportlab
    ```
 
 ## Usage
@@ -58,6 +59,9 @@ Below is the list of all available options you can define in your `config.json` 
 | `text` | string | The text to draw at the bottom of the video. Use `\n` to insert line breaks. |
 | `text_color` | string | Hex code for the bottom text color (e.g., `#FFB7CE`). |
 | `blur_radius` | integer | Gaussian blur radius applied to the background wall (default: `10`). |
+| `cutout_border_color`| string | Hex code for the cutout border outline color (e.g., `#FFB7CE`). |
+| `cutout_border_width`| integer | Width of the cutout border in pixels. Set to 0 to disable. |
+| `svg_file` | string | Optional path to an `.svg` file to use as the cutout shape. Overrides `number`. |
 
 ## Example `config.json`
 

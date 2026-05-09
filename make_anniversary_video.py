@@ -7,6 +7,8 @@ import atexit
 import shutil
 from PIL import Image, ImageFilter, ImageDraw, ImageFont, ImageOps
 from moviepy import ImageClip, CompositeVideoClip, ColorClip
+from svglib.svglib import svg2rlg
+from reportlab.graphics import renderPM
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Configurable Video Generator")
@@ -35,6 +37,7 @@ def parse_arguments():
     parser.add_argument("--blur-radius", type=int, help="Background blur radius")
     parser.add_argument("--cutout-border-color", type=str, help="Color of the cutout border")
     parser.add_argument("--cutout-border-width", type=int, help="Width of the cutout border")
+    parser.add_argument("--svg-file", type=str, help="Path to an SVG file to use as the cutout shape instead of text")
 
     return parser.parse_args()
 
@@ -62,7 +65,8 @@ def load_config(args):
         "text_color": "#FFB7CE",
         "blur_radius": 10,
         "cutout_border_color": "#FFB7CE",
-        "cutout_border_width": 10
+        "cutout_border_width": 10,
+        "svg_file": None
     }
 
     # Load JSON config if provided
@@ -83,7 +87,7 @@ def load_config(args):
     # Resolve paths relative to the config file's directory to make it robust across OS and working directories
     if args.config:
         config_dir = os.path.dirname(os.path.abspath(args.config))
-        path_keys = ['image_dir', 'font_number', 'font_text']
+        path_keys = ['image_dir', 'font_number', 'font_text', 'svg_file']
         for k in path_keys:
             if k in config and config[k] and not os.path.isabs(config[k]):
                 config[k] = os.path.join(config_dir, config[k])
@@ -132,38 +136,75 @@ def create_background_mask(config):
     img_draw = ImageDraw.Draw(img)
     
     try:
-        font_large = ImageFont.truetype(config["font_number"], size=config["font_number_size"])
-    except IOError:
-        print("Warning: Could not load thick font for cutout. Using default.")
-        font_large = ImageFont.load_default()
-
-    try:
         font_small = ImageFont.truetype(config["font_text"], size=config["font_text_size"])
     except IOError:
         print("Warning: Could not load font for text. Using default.")
         font_small = ImageFont.load_default()
 
-    # Draw the massive cutout text
-    text_number = str(config["number"])
-    # Replace literal \n from CLI strings
-    text_number = text_number.replace('\\n', '\n')
+    # Determine cutout shape and borders
+    svg_file = config.get("svg_file")
+    border_width = config.get("cutout_border_width", 0)
+    border_color = config.get("cutout_border_color", "#FFB7CE")
     
-    bbox_num = mask_draw.textbbox((0, 0), text_number, font=font_large)
-    w_num = bbox_num[2] - bbox_num[0]
-    h_num = bbox_num[3] - bbox_num[1]
-    
-    x_num = (video_size[0] - w_num) / 2
-    # Shift upwards to make room for text at the bottom
-    y_num = (video_size[1] - h_num) / 2 - bbox_num[1] - 300 
-    
-    # Handle multiline cutout text if necessary
-    mask_draw.multiline_text((x_num, y_num), text_number, font=font_large, fill=0, align="center")
+    if svg_file and os.path.exists(svg_file):
+        drawing = svg2rlg(svg_file)
+        if drawing:
+            # Render SVG to PIL
+            svg_img = renderPM.drawToPIL(drawing)
+            
+            # Create alpha channel by inverting the grayscale luminance.
+            # svglib/renderPM defaults to a white background. By inverting, 
+            # white background becomes 0 (transparent), and dark shapes become 255 (opaque).
+            alpha_channel = ImageOps.invert(svg_img.convert('L'))
+            
+            # Scale SVG to fit nicely in the center. Similar to the text size, let's say max 80% of width, 50% of height.
+            max_w, max_h = video_size[0] * 0.8, video_size[1] * 0.5
+            scale = min(max_w / svg_img.width, max_h / svg_img.height)
+            new_size = (int(svg_img.width * scale), int(svg_img.height * scale))
+            alpha_channel = alpha_channel.resize(new_size, Image.Resampling.LANCZOS)
+            
+            x_num = int((video_size[0] - new_size[0]) / 2)
+            y_num = int((video_size[1] - new_size[1]) / 2) - 300
+            
+            if border_width > 0:
+                # Pillow's MaxFilter can only be an odd square.
+                filter_size = border_width * 2 + 1
+                dilated_alpha = alpha_channel.filter(ImageFilter.MaxFilter(filter_size))
+                border_layer = Image.new('RGB', new_size, color=border_color)
+                border_layer.putalpha(dilated_alpha)
+                img.paste(border_layer, (x_num, y_num), border_layer)
+            
+            # Cutout from the mask
+            # mask is white. We paste black using the original alpha to cut the hole
+            cutout_shape = Image.new('L', new_size, color=0)
+            mask.paste(cutout_shape, (x_num, y_num), alpha_channel)
+        else:
+            print(f"Warning: Could not load SVG {svg_file}. Falling back to text.")
+            svg_file = None
+            
+    if not svg_file or not os.path.exists(svg_file):
+        try:
+            font_large = ImageFont.truetype(config["font_number"], size=config["font_number_size"])
+        except IOError:
+            print("Warning: Could not load thick font for cutout. Using default.")
+            font_large = ImageFont.load_default()
 
-    if config.get("cutout_border_width", 0) > 0:
-        border_color = config.get("cutout_border_color", "#FFB7CE")
-        # Multiply by 2 because Pillow's stroke is centered, and the inner half will be cut out by the mask
-        border_width = config["cutout_border_width"] * 2 
-        img_draw.multiline_text((x_num, y_num), text_number, font=font_large, fill=(0,0,0), stroke_width=border_width, stroke_fill=border_color, align="center")
+        # Draw the massive cutout text
+        text_number = str(config["number"])
+        text_number = text_number.replace('\\n', '\n')
+        
+        bbox_num = mask_draw.textbbox((0, 0), text_number, font=font_large)
+        w_num = bbox_num[2] - bbox_num[0]
+        h_num = bbox_num[3] - bbox_num[1]
+        
+        x_num = (video_size[0] - w_num) / 2
+        y_num = (video_size[1] - h_num) / 2 - bbox_num[1] - 300 
+        
+        mask_draw.multiline_text((x_num, y_num), text_number, font=font_large, fill=0, align="center")
+
+        if border_width > 0:
+            border_width_adjusted = border_width * 2 
+            img_draw.multiline_text((x_num, y_num), text_number, font=font_large, fill=(0,0,0), stroke_width=border_width_adjusted, stroke_fill=border_color, align="center")
 
     # Draw bottom text
     raw_text = str(config["text"]).replace('\\n', '\n')
