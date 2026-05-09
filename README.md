@@ -1,5 +1,15 @@
 # Photo Cutout Video Generator
 
+
+https://github.com/user-attachments/assets/fed6fe6f-0fb3-4eb1-8031-da1a7e153102
+
+
+
+
+https://github.com/user-attachments/assets/4ada8f81-0d5f-4036-bce6-a00427519aec
+
+
+
 A highly customizable, programmatic video generator that creates stunning vertical photo montages. It takes a collection of photos and a background image, and creates a "cutout" effect (like a giant number or letter etched into a wall) where your photos populate behind the cutout in a dense grid. It also applies a cinematic fluorescent "tubelight" flicker effect to the photos as they pop in!
 
 Perfect for creating aesthetic anniversary videos, birthday reels, or customized status updates for Instagram, WhatsApp, and TikTok.
@@ -69,7 +79,7 @@ Below is the list of all available options you can define in your `config.json` 
 {
     "image_dir": "pictures",
     "bg_image": "DSC_0073.JPG",
-    "output": "custom_anniversary_video.mp4",
+    "output": "custom_video.mp4",
     "width": 1080,
     "height": 1920,
     "fps": 30,
@@ -84,7 +94,7 @@ Below is the list of all available options you can define in your `config.json` 
     "font_text": "fonts\\Lavishly_Yours\\LavishlyYours-Regular.ttf",
     "font_text_size": 108,
     "number": "3",
-    "text": "Happy\nAnniversary\nTo Us",
+    "text": "Hello\nWorld",
     "text_color": "#FFB7CE",
     "blur_radius": 10
 }
