@@ -25,12 +25,12 @@ Perfect for creating aesthetic anniversary videos, birthday reels, or customized
 The easiest way to use the generator is by passing a JSON configuration file:
 
 ```bash
-python make_anniversary_video.py --config config.json
+python main.py --config config.json
 ```
 
 You can also override any specific setting directly via the command line:
 ```bash
-python make_anniversary_video.py --config config.json --number "5" --text "Happy\nBirthday"
+python main.py --config config.json --number "5" --text "Happy\nBirthday"
 ```
 
 ## Configuration Options

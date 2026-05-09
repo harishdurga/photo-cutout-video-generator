@@ -6,4 +6,4 @@ setup:
 	uv sync
 
 run:
-	uv run python make_anniversary_video.py --config $(CONFIG)
+	uv run python main.py --config $(CONFIG)

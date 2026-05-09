@@ -5,8 +5,10 @@ import json
 import tempfile
 import atexit
 import shutil
+import concurrent.futures
+import numpy as np
 from PIL import Image, ImageFilter, ImageDraw, ImageFont, ImageOps
-from moviepy import ImageClip, CompositeVideoClip, ColorClip
+from moviepy import ImageClip, CompositeVideoClip, ColorClip, VideoClip
 from svglib.svglib import svg2rlg
 from reportlab.graphics import renderPM
 
@@ -295,9 +297,7 @@ def main():
     # Match the shift of the cutout (-300 upwards offset)
     start_y = (video_size[1] - total_grid_height) // 2 - 300 
     
-    for i, (col, row) in enumerate(grid_coords):
-        img_path = photo_paths[i]
-        
+    def process_image(i, img_path):
         try:
             img = Image.open(img_path)
             img = ImageOps.exif_transpose(img) # EXIF Fix
@@ -305,47 +305,64 @@ def main():
             img = center_crop(img, square_size, square_size)
             temp_name = os.path.join(temp_dir, f"temp_sq_{i}.jpg")
             img.save(temp_name)
-            
-            x_pos = start_x + col * (square_size + gap)
-            y_pos = start_y + row * (square_size + gap)
-            
-            # Fix MoviePy bug: CompositeVideoClip crashes if a clip is completely off-screen
-            if x_pos + square_size <= 0 or y_pos + square_size <= 0 or x_pos >= video_size[0] or y_pos >= video_size[1]:
-                continue
-                
-            start_time = i * config["appear_interval"]
-            
-            # TUBELIGHT FLICKER EFFECT
-            # Flicker 1: ON (0.05s)
-            clip1 = (ImageClip(temp_name)
-                    .with_start(start_time)
-                    .with_duration(0.04)
-                    .with_position((x_pos, y_pos)))
-            
-            # Flicker 2: ON (0.05s)
-            clip2 = (ImageClip(temp_name)
-                    .with_start(start_time + 0.08)
-                    .with_duration(0.04)
-                    .with_position((x_pos, y_pos)))
-            
-            # Final: Solid ON
-            final_start = start_time + 0.16
-            clip_solid = (ImageClip(temp_name)
-                    .with_start(final_start)
-                    .with_duration(total_duration - final_start)
-                    .with_position((x_pos, y_pos)))
-            
-            clips.extend([clip1, clip2, clip_solid])
-            
+            return i, temp_name
         except Exception as e:
             print(f"Error processing {img_path}: {e}")
+            return None
+
+    print("Processing images in parallel...")
+    processed_images = []
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = []
+        for i, (col, row) in enumerate(grid_coords):
+            img_path = photo_paths[i]
+            futures.append(executor.submit(process_image, i, img_path))
+        
+        for future in concurrent.futures.as_completed(futures):
+            res = future.result()
+            if res:
+                processed_images.append(res)
+    
+    # Create clips from processed images in order
+    processed_images.sort(key=lambda x: x[0])
+    
+    print("Preparing frame generation logic...")
+    wall_img = Image.open(bg_path_temp).convert("RGBA")
+    
+    loaded_photos = []
+    for i, temp_name in processed_images:
+        col, row = grid_coords[i]
+        
+        x_pos = start_x + col * (square_size + gap)
+        y_pos = start_y + row * (square_size + gap)
+        
+        # Keep inside bounds
+        if x_pos + square_size <= 0 or y_pos + square_size <= 0 or x_pos >= video_size[0] or y_pos >= video_size[1]:
+            continue
             
-    wall_clip = ImageClip(bg_path_temp).with_start(0).with_duration(total_duration).with_position((0,0))
-    clips.append(wall_clip)
-            
-    print("Rendering video... This might take a few minutes because of the tubelight effect!")
-    final_video = CompositeVideoClip(clips, size=video_size)
-    final_video.write_videofile(config["output"], fps=config["fps"], codec="libx264", audio=False)
+        loaded_photos.append({
+            'img': Image.open(temp_name).convert("RGB"),
+            'x': int(x_pos),
+            'y': int(y_pos),
+            'start_time': i * config["appear_interval"]
+        })
+
+    def make_frame(t):
+        frame = Image.new('RGB', video_size, (0, 0, 0))
+        for photo in loaded_photos:
+            if t >= photo['start_time'] + 0.16:
+                frame.paste(photo['img'], (photo['x'], photo['y']))
+            elif t >= photo['start_time']:
+                dt = t - photo['start_time']
+                if (0 <= dt < 0.041) or (0.08 <= dt < 0.121):
+                    frame.paste(photo['img'], (photo['x'], photo['y']))
+        
+        frame.paste(wall_img, (0, 0), wall_img)
+        return np.array(frame)
+
+    print("Rendering video... This will be blisteringly fast now!")
+    final_video = VideoClip(make_frame, duration=total_duration)
+    final_video.write_videofile(config["output"], fps=config["fps"], codec="libx264", audio=False, threads=os.cpu_count())
     
     print(f"\nDone! Your video is ready at: {os.path.abspath(config['output'])}")
 
