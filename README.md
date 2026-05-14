@@ -1,26 +1,21 @@
 # Photo Cutout Video Generator
 
-
 https://github.com/user-attachments/assets/fed6fe6f-0fb3-4eb1-8031-da1a7e153102
-
-
-
 
 https://github.com/user-attachments/assets/4ada8f81-0d5f-4036-bce6-a00427519aec
 
-
-
-A highly customizable, programmatic video generator that creates stunning vertical photo montages. It takes a collection of photos and a background image, and creates a "cutout" effect (like a giant number or letter etched into a wall) where your photos populate behind the cutout in a dense grid. It also applies a cinematic fluorescent "tubelight" flicker effect to the photos as they pop in!
+A highly customizable, programmatic video generator that creates stunning vertical photo montages. It takes a collection of photos and creates a "cutout" effect (like a giant number, letter, or SVG shape) where your photos populate behind the cutout in a dense grid. It also applies a cinematic fluorescent "tubelight" flicker effect to the photos as they pop in!
 
 Perfect for creating aesthetic anniversary videos, birthday reels, or customized status updates for Instagram, WhatsApp, and TikTok.
 
 ## Features
 - **Dynamic Cutout Masks**: Specify any text, number (e.g., "3"), or provide an SVG file to be cut out of the background.
-- **Customizable Borders**: Add a colored outline around your text or SVG cutouts to make them pop.
+- **Advanced Backgrounds**: Choose between a solid color, a linear gradient, or a background image (with cover, contain, or stretch sizing options).
+- **Positioning Engine**: Precisely position your cutout mask and bottom text layer using `x`, `y` anchors (e.g., `center`, `bottom`) paired with detailed margin controls (`margin_top`, `margin_bottom`, etc.).
+- **Beat-Sync Animation**: Synchronize the "pop-in" of photos perfectly to the beat of an attached audio track.
 - **Tubelight Flicker Animation**: Photos pop into the grid with a cool, randomized fluorescent blinking effect.
+- **Fully Configurable JSON**: Completely control grid sizes, layout, colors, overlays, blur radius, fonts, and duration using a nested JSON configuration file.
 - **EXIF Auto-Correction**: Automatically rotates portrait/landscape photos correctly based on EXIF data.
-- **Fully Configurable**: Tweak grid sizes, gaps, text formatting, blur radius, frame rates, and more using a simple JSON file or CLI arguments.
-- **Custom Fonts**: Drop in any `.ttf` file to customize the cutout shape or the overlaid text.
 
 ## Installation
 
@@ -32,68 +27,101 @@ Perfect for creating aesthetic anniversary videos, birthday reels, or customized
 
 ## Usage
 
-The easiest way to use the generator is by passing a JSON configuration file:
+The generator relies completely on a nested JSON configuration file. To run the generator:
 
 ```bash
 python main.py --config config.json
 ```
 
-You can also override any specific setting directly via the command line:
+If you use `uv`, you can run:
 ```bash
-python main.py --config config.json --cutout-text "5" --text "Happy\nBirthday"
+uv run python main.py --config config.json
 ```
 
 ## Configuration Options
 
-Below is the list of all available options you can define in your `config.json` file (or pass as CLI arguments):
+Below is an example of the structured `config.json` file. The schema is deeply nested for organization.
 
-| Option | Type | Description |
-| :--- | :--- | :--- |
-| `image_dir` | string | Directory containing the pictures to be used in the background grid. |
-| `bg_image` | string | The image file to use for the blurred foreground "wall". Must be located in `image_dir`. |
-| `output` | string | The name and path of the generated MP4 file (e.g., `video.mp4`). |
-| `width` | integer | The width of the generated video (default: `1080`). |
-| `height` | integer | The height of the generated video (default: `1920`). |
-| `fps` | integer | Frames per second for the video (default: `30`). |
-| `appear_interval` | float | Time in seconds between each photo appearing in the grid (default: `0.2`). |
-| `hold_duration` | float | Time in seconds to hold the video after the final photo appears (default: `3.0`). |
-| `square_size` | integer | Width/height in pixels of each photo tile in the background grid. |
-| `gap` | integer | Space in pixels between each photo tile in the grid. |
-| `target_duration` | float | Target duration of the video in seconds (default: `10.0`). The script will intelligently lay out photos to meet this duration. |
-| `audio` | string | Optional path to an audio track to attach. If provided, the photo tiles will be synced to pop on the musical beats automatically! |
-| `font_cutout` | string | Path to the `.ttf` font file used for the massive cutout mask. |
-| `font_text` | string | Path to the `.ttf` font file used for the bottom text. |
-| `font_text_size` | integer | Font size for the bottom text. |
-| `cutout_text` | string | The character(s) or text to cut out from the center of the wall. |
-| `text` | string | The text to draw at the bottom of the video. Use `\n` to insert line breaks. |
-| `text_color` | string | Hex code for the bottom text color (e.g., `#FFB7CE`). |
-| `blur_radius` | integer | Gaussian blur radius applied to the background wall (default: `10`). |
-| `cutout_border_color`| string | Hex code for the cutout border outline color (e.g., `#FFB7CE`). |
-| `cutout_border_width`| integer | Width of the cutout border in pixels. Set to 0 to disable. |
-| `svg_file` | string | Optional path to an `.svg` file to use as the cutout shape. Overrides `number`. |
-
-## Example `config.json`
+### Example `config.json`
 
 ```json
 {
+  "output": "output.mp4",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "target_duration": 10.0,
+  "hold_duration": 3.0,
+  "audio": "song.mp3",
+  "grid": {
     "image_dir": "pictures",
-    "bg_image": "DSC_0073.JPG",
-    "output": "custom_video.mp4",
-    "width": 1080,
-    "height": 1920,
-    "fps": 30,
-    "appear_interval": 0.2,
-    "hold_duration": 3.0,
     "square_size": 215,
     "gap": 5,
-    "target_duration": 10.0,
-    "audio": "song.mp3",
-    "font_cutout": "AlfaSlabOne-Regular.ttf",
-    "font_text": "fonts\\Lavishly_Yours\\LavishlyYours-Regular.ttf",
-    "font_text_size": 108,
-    "cutout_text": "3",
-    "text": "Hello\nWorld",
-    "text_color": "#FFB7CE",
-    "blur_radius": 10
+    "appear_interval": 0.2
+  },
+  "bg": {
+    "type": "image",
+    "image": "DSC_0073.JPG",
+    "size": "cover",
+    "color": "#000000",
+    "gradient": {
+      "start": "#000000",
+      "end": "#ffffff"
+    },
+    "blur_radius": 10,
+    "overlay": {
+      "color": "#000000",
+      "opacity": 0.5
+    }
+  },
+  "cutout": {
+    "type": "text",
+    "text": "3",
+    "font": "AlfaSlabOne-Regular.ttf",
+    "svg_file": null,
+    "border_color": "#FFB7CE",
+    "border_width": 0,
+    "position": {
+      "x": "center",
+      "y": "center",
+      "margin_top": 0,
+      "margin_bottom": 50,
+      "margin_left": 0,
+      "margin_right": 0
+    },
+    "etched": {
+      "enabled": true,
+      "shadow_blur": 15,
+      "offset_x": 15,
+      "offset_y": 15,
+      "shadow_opacity": 0.8,
+      "shadow_color": "#000000",
+      "highlight_opacity": 0.3,
+      "highlight_color": "#ffffff"
+    }
+  },
+  "text_layer": {
+    "text": "Happy\nAnniversary",
+    "font": "LavishlyYours-Regular.ttf",
+    "font_size": 108,
+    "color": "#FFB7CE",
+    "position": {
+      "x": "center",
+      "y": "bottom",
+      "margin_top": 0,
+      "margin_bottom": 100,
+      "margin_left": 0,
+      "margin_right": 0
+    }
+  }
 }
 ```
+
+### Key Settings Explained
+- **`audio` & `target_duration`**: Providing an audio file ensures photos synchronize to the beat of the music! The video will attempt to reach `target_duration` (seconds).
+- **`bg.type`**: Can be `"image"`, `"solid"`, or `"gradient"`. Depending on the choice, the respective inner properties are used. 
+- **`bg.size`**: Valid only for images. Options include `"cover"`, `"contain"`, and `"stretch"`.
+- **`bg.overlay`**: Adds a color tint to your background. Set `opacity` between `0.0` (invisible) and `1.0` (solid).
+- **`cutout.type`**: Can be `"text"` or `"svg"`. If `"svg"`, `cutout.svg_file` must point to an SVG. If `"text"`, `cutout.text` is used.
+- **`cutout.etched`**: Gives your cutout shape a realistic "3D carved/etched-in" look using configurable inner shadows and highlights.
+- **`position` blocks**: Specify exactly where elements are anchored (`"x"` can be `"center"`, `"left"`, `"right"`; `"y"` can be `"center"`, `"top"`, `"bottom"`). Further offset them using the `margin` properties.

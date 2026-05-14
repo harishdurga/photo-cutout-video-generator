@@ -16,84 +16,97 @@ import librosa
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Configurable Video Generator")
-    parser.add_argument("--config", type=str, help="Path to JSON config file")
-    
-    # CLI arguments that override config
-    parser.add_argument("--image-dir", type=str, help="Directory containing pictures")
-    parser.add_argument("--bg-image", type=str, help="Background image file")
-    parser.add_argument("--output", type=str, help="Output video file")
-    parser.add_argument("--width", type=int, help="Video width")
-    parser.add_argument("--height", type=int, help="Video height")
-    parser.add_argument("--fps", type=int, help="Frames per second")
-    parser.add_argument("--target-duration", type=float, help="Target duration of the video in seconds")
-    parser.add_argument("--audio", type=str, help="Path to an audio file for beat syncing")
-    parser.add_argument("--appear-interval", type=float, help="Seconds between photo appearance")
-    parser.add_argument("--hold-duration", type=float, help="Seconds to hold the final shape")
-    parser.add_argument("--square-size", type=int, help="Size of grid squares")
-    parser.add_argument("--gap", type=int, help="Gap between grid squares")
-    parser.add_argument("--font-cutout", type=str, help="Font file for the large cutout text")
-    parser.add_argument("--font-text", type=str, help="Font file for the bottom text")
-    parser.add_argument("--font-text-size", type=int, help="Font size for the bottom text")
-    parser.add_argument("--cutout-text", type=str, help="The massive cutout text")
-    parser.add_argument("--text", type=str, help="The text at the bottom. Use \\n for newlines.")
-    parser.add_argument("--text-color", type=str, help="Color of the text")
-    parser.add_argument("--blur-radius", type=int, help="Background blur radius")
-    parser.add_argument("--cutout-border-color", type=str, help="Color of the cutout border")
-    parser.add_argument("--cutout-border-width", type=int, help="Width of the cutout border")
-    parser.add_argument("--svg-file", type=str, help="Path to an SVG file to use as the cutout shape instead of text")
-
+    parser.add_argument("--config", type=str, help="Path to JSON config file", default="config.json")
     return parser.parse_args()
 
 def load_config(args):
-    # Default settings
+    # Base defaults for nested config
     config = {
-        "image_dir": "pictures",
-        "bg_image": "DSC_0073.JPG",
-        "output": "anniversary_video.mp4",
+        "output": "output.mp4",
         "width": 1080,
         "height": 1920,
         "fps": 30,
-        "appear_interval": 0.2,
-        "hold_duration": 3.0,
-        "square_size": 215,
-        "gap": 5,
         "target_duration": 10.0,
+        "hold_duration": 3.0,
         "audio": None,
-        "font_cutout": "AlfaSlabOne-Regular.ttf",
-        "font_text": r"fonts\Lavishly_Yours\LavishlyYours-Regular.ttf",
-        "font_text_size": 108,
-        "cutout_text": "3",
-        "text": "Happy\nAnniversary",
-        "text_color": "#FFB7CE",
-        "blur_radius": 10,
-        "cutout_border_color": "#FFB7CE",
-        "cutout_border_width": 0,
-        "svg_file": None
+        "grid": {
+            "image_dir": "pictures",
+            "square_size": 215,
+            "gap": 5,
+            "appear_interval": 0.2
+        },
+        "bg": {
+            "type": "image",
+            "image": "DSC_0073.JPG",
+            "size": "cover",
+            "color": "#000000",
+            "gradient": {"start": "#000000", "end": "#ffffff"},
+            "blur_radius": 10,
+            "overlay": {"color": "#000000", "opacity": 0.0}
+        },
+        "cutout": {
+            "type": "text",
+            "text": "3",
+            "font": "AlfaSlabOne-Regular.ttf",
+            "svg_file": None,
+            "border_color": "#FFB7CE",
+            "border_width": 0,
+            "position": {"x": "center", "y": "center", "margin_top": 0, "margin_bottom": 0, "margin_left": 0, "margin_right": 0}
+        },
+        "text_layer": {
+            "text": "Happy\nAnniversary",
+            "font": "LavishlyYours-Regular.ttf",
+            "font_size": 108,
+            "color": "#FFB7CE",
+            "position": {"x": "center", "y": "bottom", "margin_top": 0, "margin_bottom": 100, "margin_left": 0, "margin_right": 0}
+        }
     }
 
-    # Load JSON config if provided
-    if args.config:
+    if args.config and os.path.exists(args.config):
         try:
             with open(args.config, 'r') as f:
                 file_config = json.load(f)
-                config.update(file_config)
+                
+                # Simple recursive update for nested dicts
+                def update_dict(d, u):
+                    for k, v in u.items():
+                        if isinstance(v, dict) and k in d and isinstance(d[k], dict):
+                            update_dict(d[k], v)
+                        else:
+                            d[k] = v
+                
+                update_dict(config, file_config)
         except Exception as e:
             print(f"Error loading config file: {e}")
 
-    # Override with CLI arguments if provided
-    for key, value in vars(args).items():
-        if value is not None and key != 'config':
-            # Map argparse names to config names (e.g., image_dir)
-            config[key] = value
-
-    # Resolve paths relative to the config file's directory to make it robust across OS and working directories
-    if args.config:
+    # Resolve paths relative to config file directory
+    if args.config and os.path.exists(args.config):
         config_dir = os.path.dirname(os.path.abspath(args.config))
-        path_keys = ['image_dir', 'font_cutout', 'font_text', 'svg_file', 'audio']
-        for k in path_keys:
-            if k in config and config[k] and not os.path.isabs(config[k]):
-                config[k] = os.path.join(config_dir, config[k])
-        # Note: bg_image is loaded relative to image_dir, so we don't need to resolve it here
+        
+        # Audio
+        if config.get("audio") and not os.path.isabs(config["audio"]):
+            config["audio"] = os.path.join(config_dir, config["audio"])
+            
+        # Grid image_dir
+        if config["grid"].get("image_dir") and not os.path.isabs(config["grid"]["image_dir"]):
+            config["grid"]["image_dir"] = os.path.join(config_dir, config["grid"]["image_dir"])
+            
+        # bg image
+        if config["bg"].get("image") and not os.path.isabs(config["bg"]["image"]):
+            # Relative to image_dir or config_dir
+            if os.path.exists(os.path.join(config["grid"]["image_dir"], config["bg"]["image"])):
+                config["bg"]["image"] = os.path.join(config["grid"]["image_dir"], config["bg"]["image"])
+            else:
+                config["bg"]["image"] = os.path.join(config_dir, config["bg"]["image"])
+                
+        # cutout font/svg
+        for k in ["font", "svg_file"]:
+            if config["cutout"].get(k) and not os.path.isabs(config["cutout"][k]):
+                config["cutout"][k] = os.path.join(config_dir, config["cutout"][k])
+                
+        # text_layer font
+        if config["text_layer"].get("font") and not os.path.isabs(config["text_layer"]["font"]):
+            config["text_layer"]["font"] = os.path.join(config_dir, config["text_layer"]["font"])
 
     return config
 
@@ -118,79 +131,153 @@ def center_crop(img, target_width, target_height):
     img = img.crop((left, top, right, bottom))
     return img.resize((target_width, target_height), Image.Resampling.LANCZOS)
 
-def create_background_mask(config):
-    bg_path = os.path.join(config["image_dir"], config["bg_image"])
-    video_size = (config["width"], config["height"])
-    
-    if not os.path.exists(bg_path):
-        print(f"Warning: Background image {bg_path} not found. Using solid dark gray background.")
-        img = Image.new('RGB', video_size, (230, 230, 230))
+def contain_resize(img, target_width, target_height):
+    width, height = img.size
+    aspect = width / height
+    target_aspect = target_width / target_height
+
+    if aspect > target_aspect:
+        new_width = target_width
+        new_height = int(target_width / aspect)
     else:
-        img = Image.open(bg_path)
-        img = ImageOps.exif_transpose(img) # FIX FOR LANDSCAPE/PORTRAIT ISSUE
-        img = img.convert("RGB")
-        img = center_crop(img, video_size[0], video_size[1])
-        img = img.convert("L").convert("RGB")
-        img = img.filter(ImageFilter.GaussianBlur(radius=config["blur_radius"]))
+        new_height = target_height
+        new_width = int(target_height * aspect)
         
+    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    canvas = Image.new('RGB', (target_width, target_height), (0,0,0))
+    canvas.paste(img, ((target_width - new_width)//2, (target_height - new_height)//2))
+    return canvas
+
+def create_gradient(width, height, color1, color2):
+    base = Image.new('RGB', (width, height), color1)
+    top = Image.new('RGB', (width, height), color2)
+    mask = Image.new('L', (width, height))
+    mask_data = []
+    for y in range(height):
+        mask_data.extend([int(255 * (y / height))] * width)
+    mask.putdata(mask_data)
+    base.paste(top, (0, 0), mask)
+    return base
+
+def calculate_position(pos_config, item_w, item_h, container_w, container_h):
+    x_spec = pos_config.get("x", "center")
+    y_spec = pos_config.get("y", "center")
+    
+    if isinstance(x_spec, str):
+        if x_spec == "center":
+            x = (container_w - item_w) // 2
+        elif x_spec == "left":
+            x = 0
+        elif x_spec == "right":
+            x = container_w - item_w
+        else:
+            x = 0
+    else:
+        x = int(x_spec)
+        
+    if isinstance(y_spec, str):
+        if y_spec == "center":
+            y = (container_h - item_h) // 2
+        elif y_spec == "top":
+            y = 0
+        elif y_spec == "bottom":
+            y = container_h - item_h
+        else:
+            y = 0
+    else:
+        y = int(y_spec)
+        
+    x += pos_config.get("margin_left", 0) or 0
+    x -= pos_config.get("margin_right", 0) or 0
+    y += pos_config.get("margin_top", 0) or 0
+    y -= pos_config.get("margin_bottom", 0) or 0
+    
+    return int(x), int(y)
+
+def create_background_mask(config):
+    video_size = (config["width"], config["height"])
+    bg_config = config["bg"]
+    
+    # 1. Base Background
+    if bg_config["type"] == "gradient":
+        start_c = bg_config["gradient"].get("start", "#000000")
+        end_c = bg_config["gradient"].get("end", "#ffffff")
+        img = create_gradient(video_size[0], video_size[1], start_c, end_c)
+    elif bg_config["type"] == "solid":
+        img = Image.new('RGB', video_size, bg_config.get("color", "#000000"))
+    else: # image
+        bg_path = bg_config.get("image", "")
+        if not os.path.exists(bg_path):
+            print(f"Warning: Background image {bg_path} not found. Using solid dark gray.")
+            img = Image.new('RGB', video_size, (50, 50, 50))
+        else:
+            img = Image.open(bg_path)
+            img = ImageOps.exif_transpose(img)
+            img = img.convert("RGB")
+            
+            size_mode = bg_config.get("size", "cover")
+            if size_mode == "stretch":
+                img = img.resize(video_size, Image.Resampling.LANCZOS)
+            elif size_mode == "contain":
+                img = contain_resize(img, video_size[0], video_size[1])
+            else: # cover
+                img = center_crop(img, video_size[0], video_size[1])
+                
+    # 2. Blur
+    blur_radius = bg_config.get("blur_radius", 0)
+    if blur_radius > 0:
+        img = img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+        
+    # 3. Overlay
+    overlay_cfg = bg_config.get("overlay")
+    if overlay_cfg and overlay_cfg.get("opacity", 0) > 0:
+        opacity = int(overlay_cfg["opacity"] * 255)
+        overlay_color = overlay_cfg.get("color", "#000000")
+        overlay_img = Image.new('RGBA', video_size, overlay_color)
+        overlay_img.putalpha(opacity)
+        img.paste(overlay_img, (0, 0), overlay_img)
+
     mask = Image.new('L', video_size, color=255)
     mask_draw = ImageDraw.Draw(mask)
     img_draw = ImageDraw.Draw(img)
-    
-    try:
-        font_small = ImageFont.truetype(config["font_text"], size=config["font_text_size"])
-    except IOError:
-        print("Warning: Could not load font for text. Using default.")
-        font_small = ImageFont.load_default()
 
-    # Determine cutout shape and borders
-    svg_file = config.get("svg_file")
-    border_width = config.get("cutout_border_width", 0)
-    border_color = config.get("cutout_border_color", "#FFB7CE")
+    # 4. Cutout
+    cutout_cfg = config["cutout"]
+    border_width = cutout_cfg.get("border_width", 0)
+    border_color = cutout_cfg.get("border_color", "#FFFFFF")
     
-    if svg_file and os.path.exists(svg_file):
-        drawing = svg2rlg(svg_file)
+    cutout_center_x, cutout_center_y = video_size[0]//2, video_size[1]//2
+    
+    if cutout_cfg["type"] == "svg" and cutout_cfg.get("svg_file") and os.path.exists(cutout_cfg["svg_file"]):
+        drawing = svg2rlg(cutout_cfg["svg_file"])
         if drawing:
-            # Render SVG to PIL
             svg_img = renderPM.drawToPIL(drawing)
-            
-            # Create alpha channel by inverting the grayscale luminance.
-            # svglib/renderPM defaults to a white background. By inverting, 
-            # white background becomes 0 (transparent), and dark shapes become 255 (opaque).
             alpha_channel = ImageOps.invert(svg_img.convert('L'))
             bbox = alpha_channel.getbbox()
             if bbox:
                 alpha_channel = alpha_channel.crop(bbox)
             
-            # Scale SVG to fit nicely in the center. Similar to the text size, let's say max 85% of width, 65% of height.
             max_w, max_h = video_size[0] * 0.85, video_size[1] * 0.65
             scale = min(max_w / alpha_channel.width, max_h / alpha_channel.height)
             new_size = (int(alpha_channel.width * scale), int(alpha_channel.height * scale))
             alpha_channel = alpha_channel.resize(new_size, Image.Resampling.LANCZOS)
             
-            x_num = int((video_size[0] - new_size[0]) / 2)
-            y_num = int((video_size[1] - new_size[1]) / 2) - 300
+            x_num, y_num = calculate_position(cutout_cfg.get("position", {}), new_size[0], new_size[1], video_size[0], video_size[1])
+            cutout_center_x, cutout_center_y = x_num + new_size[0]//2, y_num + new_size[1]//2
             
             if border_width > 0:
-                # Pillow's MaxFilter can only be an odd square.
                 filter_size = border_width * 2 + 1
                 dilated_alpha = alpha_channel.filter(ImageFilter.MaxFilter(filter_size))
                 border_layer = Image.new('RGB', new_size, color=border_color)
                 border_layer.putalpha(dilated_alpha)
                 img.paste(border_layer, (x_num, y_num), border_layer)
             
-            # Cutout from the mask
-            # mask is white. We paste black using the original alpha to cut the hole
             cutout_shape = Image.new('L', new_size, color=0)
             mask.paste(cutout_shape, (x_num, y_num), alpha_channel)
-        else:
-            print(f"Warning: Could not load SVG {svg_file}. Falling back to text.")
-            svg_file = None
-            
-    if not svg_file or not os.path.exists(svg_file):
-        cutout_text = str(config.get("cutout_text", "3"))
-        cutout_text = cutout_text.replace('\\n', '\n')
-        font_path = config.get("font_cutout", "AlfaSlabOne-Regular.ttf")
+    else:
+        # Text cutout
+        cutout_text = str(cutout_cfg.get("text", "")).replace('\\n', '\n')
+        font_path = cutout_cfg.get("font", "")
         
         target_width = video_size[0] * 0.90
         target_height = video_size[1] * 0.70
@@ -218,36 +305,102 @@ def create_background_mask(config):
             print("Warning: Could not load thick font for cutout. Using default.")
             font_large = ImageFont.load_default()
 
-        # Re-calculate final bbox to center properly
         bbox_num = mask_draw.textbbox((0, 0), cutout_text, font=font_large)
         w_num = bbox_num[2] - bbox_num[0]
         h_num = bbox_num[3] - bbox_num[1]
         
-        x_num = (video_size[0] - w_num) / 2
-        y_num = (video_size[1] - h_num) / 2 - bbox_num[1] - 300 
+        x_num, y_num = calculate_position(cutout_cfg.get("position", {}), w_num, h_num, video_size[0], video_size[1])
+        # Textbbox offset needs to be accounted for in Pillow text drawing
+        actual_x = x_num - bbox_num[0]
+        actual_y = y_num - bbox_num[1]
         
-        mask_draw.multiline_text((x_num, y_num), cutout_text, font=font_large, fill=0, align="center")
+        cutout_center_x, cutout_center_y = x_num + w_num//2, y_num + h_num//2
+        
+        mask_draw.multiline_text((actual_x, actual_y), cutout_text, font=font_large, fill=0, align="center")
 
         if border_width > 0:
             border_width_adjusted = border_width * 2 
-            img_draw.multiline_text((x_num, y_num), cutout_text, font=font_large, fill=(0,0,0), stroke_width=border_width_adjusted, stroke_fill=border_color, align="center")
+            img_draw.multiline_text((actual_x, actual_y), cutout_text, font=font_large, fill=(0,0,0), stroke_width=border_width_adjusted, stroke_fill=border_color, align="center")
 
-    # Draw bottom text
-    raw_text = str(config["text"]).replace('\\n', '\n')
-    lines = raw_text.split('\n')
-    
-    base_y = video_size[1] - 550
-    line_spacing = config["font_text_size"] * 1.2
-    
-    for i, line in enumerate(lines):
-        bbox = img_draw.textbbox((0, 0), line, font=font_small)
-        w = bbox[2] - bbox[0]
-        x = (video_size[0] - w) / 2
-        y = base_y + (i * line_spacing)
-        img_draw.text((x, y), line, font=font_small, fill=config["text_color"], stroke_width=2, stroke_fill=config["text_color"])
+    # Etched Inner Shadow & Highlight
+    etched_cfg = cutout_cfg.get("etched", {})
+    if etched_cfg.get("enabled", False):
+        from PIL import ImageChops
+        shadow_blur = etched_cfg.get("shadow_blur", 15)
+        offset_x = etched_cfg.get("offset_x", 15)
+        offset_y = etched_cfg.get("offset_y", 15)
+        shadow_opacity = etched_cfg.get("shadow_opacity", 0.8)
+        shadow_color = etched_cfg.get("shadow_color", "#000000")
+        highlight_opacity = etched_cfg.get("highlight_opacity", 0.3)
+        highlight_color = etched_cfg.get("highlight_color", "#ffffff")
+        
+        # Blur the mask (wall is white, hole is black)
+        mask_blur = mask.filter(ImageFilter.GaussianBlur(shadow_blur))
+        
+        # Hole shape (white inside hole, black outside)
+        S = ImageOps.invert(mask)
+        
+        # 1. Shadow (offset positive)
+        if shadow_opacity > 0:
+            shadow_intensity = Image.new('L', video_size, 0)
+            shadow_intensity.paste(mask_blur, (offset_x, offset_y))
+            # Restrict to hole
+            inner_shadow_alpha = ImageChops.darker(shadow_intensity, S)
+            if shadow_opacity < 1.0:
+                inner_shadow_alpha = inner_shadow_alpha.point(lambda p: int(p * shadow_opacity))
+            
+            shadow_layer = Image.new('RGB', video_size, shadow_color)
+            img.paste(shadow_layer, (0, 0), inner_shadow_alpha)
+            mask = ImageChops.lighter(mask, inner_shadow_alpha)
+            
+        # 2. Highlight (offset negative)
+        if highlight_opacity > 0:
+            highlight_intensity = Image.new('L', video_size, 0)
+            highlight_intensity.paste(mask_blur, (-offset_x, -offset_y))
+            inner_highlight_alpha = ImageChops.darker(highlight_intensity, S)
+            if highlight_opacity < 1.0:
+                inner_highlight_alpha = inner_highlight_alpha.point(lambda p: int(p * highlight_opacity))
+                
+            highlight_layer = Image.new('RGB', video_size, highlight_color)
+            img.paste(highlight_layer, (0, 0), inner_highlight_alpha)
+            mask = ImageChops.lighter(mask, inner_highlight_alpha)
+
+    # 5. Text Layer
+    text_cfg = config.get("text_layer", {})
+    if text_cfg and text_cfg.get("text"):
+        try:
+            font_small = ImageFont.truetype(text_cfg.get("font", ""), size=text_cfg.get("font_size", 50))
+        except IOError:
+            font_small = ImageFont.load_default()
+            
+        raw_text = str(text_cfg["text"]).replace('\\n', '\n')
+        lines = raw_text.split('\n')
+        line_spacing = text_cfg.get("font_size", 50) * 1.2
+        
+        # Calculate full text block size
+        max_w = 0
+        total_h = len(lines) * line_spacing
+        for line in lines:
+            bbox = img_draw.textbbox((0, 0), line, font=font_small)
+            max_w = max(max_w, bbox[2] - bbox[0])
+            
+        text_x, text_y = calculate_position(text_cfg.get("position", {}), max_w, total_h, video_size[0], video_size[1])
+        
+        for i, line in enumerate(lines):
+            bbox = img_draw.textbbox((0, 0), line, font=font_small)
+            w = bbox[2] - bbox[0]
+            # Center each line individually horizontally relative to the text block bounds, if position x is center, else just align left
+            x_spec = text_cfg.get("position", {}).get("x", "center")
+            if x_spec == "center":
+                x = text_x + (max_w - w) / 2
+            else:
+                x = text_x
+                
+            y = text_y + (i * line_spacing)
+            img_draw.text((x, y), line, font=font_small, fill=text_cfg.get("color", "#FFFFFF"), stroke_width=2, stroke_fill=text_cfg.get("color", "#FFFFFF"))
     
     img.putalpha(mask)
-    return img
+    return img, (cutout_center_x, cutout_center_y)
 
 def get_random_images(image_dir, count, exclude_name):
     valid_extensions = ('.jpg', '.jpeg', '.png')
@@ -271,30 +424,26 @@ def main():
     args = parse_arguments()
     config = load_config(args)
     
-    print(f"Loaded configuration:")
-    for k, v in config.items():
-        print(f"  {k}: {v}")
-        
-    # Ensure output directory exists so video saving doesn't fail
+    print("Configuration loaded.")
     out_dir = os.path.dirname(os.path.abspath(config["output"]))
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
 
-    # Use a secure temporary directory that auto-cleans on exit
     temp_dir = tempfile.mkdtemp()
     atexit.register(lambda: shutil.rmtree(temp_dir, ignore_errors=True))
 
-    print("\nPreparing cutout background...")
-    bg_img = create_background_mask(config)
+    print("\nPreparing background and mask...")
+    bg_img, cutout_center = create_background_mask(config)
     bg_path_temp = os.path.join(temp_dir, "temp_bg_mask.png")
     bg_img.save(bg_path_temp)
     
-    square_size = config["square_size"]
-    gap = config["gap"]
+    grid_cfg = config["grid"]
+    square_size = grid_cfg["square_size"]
+    gap = grid_cfg["gap"]
     video_size = (config["width"], config["height"])
     
-    grid_cols = math.ceil(video_size[0] / (square_size + gap))
-    grid_rows = math.ceil(video_size[1] / (square_size + gap))
+    grid_cols = math.ceil(video_size[0] / (square_size + gap)) + 1 # +1 to ensure full coverage 
+    grid_rows = math.ceil(video_size[1] / (square_size + gap)) + 1
     
     grid_coords = [(c, r) for c in range(grid_cols) for r in range(grid_rows)]
     random.shuffle(grid_coords)
@@ -303,13 +452,13 @@ def main():
     
     reveal_duration = float(config.get("target_duration") or 10.0)
     total_duration = reveal_duration + config["hold_duration"]
-    config["appear_interval"] = max(0.01, reveal_duration / total_photos)
+    grid_cfg["appear_interval"] = max(0.01, reveal_duration / total_photos)
     
     audio_clip = None
     beat_times = []
     
     if config.get("audio") and os.path.exists(config["audio"]):
-        print(f"Loading audio and detecting beats from {config['audio']} for {reveal_duration} seconds...")
+        print(f"Loading audio and detecting beats from {config['audio']}...")
         y, sr = librosa.load(config["audio"], duration=reveal_duration)
         tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
         beat_times = librosa.frames_to_time(beat_frames, sr=sr).tolist()
@@ -318,34 +467,36 @@ def main():
         audio_duration = min(total_duration, audio_file.duration)
         audio_clip = audio_file.subclipped(0, audio_duration)
         
-    # Base black layer
     base_clip = ColorClip(size=video_size, color=(0,0,0)).with_duration(total_duration)
-    clips = [base_clip]
     
-    print("Selecting and preparing photos...")
-    photo_paths = get_random_images(config["image_dir"], total_photos, config["bg_image"])
+    print("Selecting photos...")
+    exclude_img = config["bg"].get("image", "") if config["bg"]["type"] == "image" else ""
+    if exclude_img:
+        exclude_img = os.path.basename(exclude_img)
+        
+    photo_paths = get_random_images(grid_cfg["image_dir"], total_photos, exclude_img)
     
     if not photo_paths:
-        print(f"Error: No valid images found in {config['image_dir']}")
+        print(f"Error: No valid images found in {grid_cfg['image_dir']}")
         return
 
     total_grid_width = grid_cols * square_size + (grid_cols - 1) * gap
     total_grid_height = grid_rows * square_size + (grid_rows - 1) * gap
-    start_x = (video_size[0] - total_grid_width) // 2
-    # Match the shift of the cutout (-300 upwards offset)
-    start_y = (video_size[1] - total_grid_height) // 2 - 300 
+    
+    # Align the grid center with the cutout center so the photo tiles fully back the cutout
+    start_x = cutout_center[0] - total_grid_width // 2
+    start_y = cutout_center[1] - total_grid_height // 2
     
     def process_image(i, img_path):
         try:
             img = Image.open(img_path)
-            img = ImageOps.exif_transpose(img) # EXIF Fix
+            img = ImageOps.exif_transpose(img)
             img = img.convert("RGB")
             img = center_crop(img, square_size, square_size)
             temp_name = os.path.join(temp_dir, f"temp_sq_{i}.jpg")
             img.save(temp_name)
             return i, temp_name
         except Exception as e:
-            print(f"Error processing {img_path}: {e}")
             return None
 
     print("Processing images in parallel...")
@@ -361,7 +512,6 @@ def main():
             if res:
                 processed_images.append(res)
     
-    # Create clips from processed images in order
     processed_images.sort(key=lambda x: x[0])
     
     print("Preparing frame generation logic...")
@@ -379,17 +529,15 @@ def main():
         x_pos = start_x + col * (square_size + gap)
         y_pos = start_y + row * (square_size + gap)
         
-        # Keep inside bounds
         if x_pos + square_size <= 0 or y_pos + square_size <= 0 or x_pos >= video_size[0] or y_pos >= video_size[1]:
             continue
             
         if audio_clip and beat_times:
             beat_idx = min(i // photos_per_beat, len(beat_times) - 1)
             start_time = beat_times[beat_idx]
-            # Optional stagger effect for grouped tiles
             start_time += (i % photos_per_beat) * 0.005 
         else:
-            start_time = i * config["appear_interval"]
+            start_time = i * grid_cfg["appear_interval"]
             
         loaded_photos.append({
             'img': Image.open(temp_name).convert("RGB"),
@@ -411,13 +559,13 @@ def main():
         frame.paste(wall_img, (0, 0), wall_img)
         return np.array(frame)
 
-    print("Rendering video... This will be blisteringly fast now!")
+    print("Rendering video...")
     final_video = VideoClip(make_frame, duration=total_duration)
     if audio_clip:
         final_video = final_video.with_audio(audio_clip)
     final_video.write_videofile(config["output"], fps=config["fps"], codec="libx264", audio_codec="aac", threads=os.cpu_count())
     
-    print(f"\nDone! Your video is ready at: {os.path.abspath(config['output'])}")
+    print(f"\nDone! Video is ready at: {os.path.abspath(config['output'])}")
 
 if __name__ == "__main__":
     main()
