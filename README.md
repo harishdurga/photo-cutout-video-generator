@@ -57,7 +57,8 @@ Below is an example of the structured `config.json` file. The schema is deeply n
     "image_dir": "pictures",
     "square_size": 215,
     "gap": 5,
-    "appear_interval": 0.2
+    "appear_interval": 0.2,
+    "order": "random"
   },
   "bg": {
     "type": "image",

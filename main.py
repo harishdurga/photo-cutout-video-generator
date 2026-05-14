@@ -33,7 +33,8 @@ def load_config(args):
             "image_dir": "pictures",
             "square_size": 215,
             "gap": 5,
-            "appear_interval": 0.2
+            "appear_interval": 0.2,
+            "order": "random"
         },
         "bg": {
             "type": "image",
@@ -463,7 +464,18 @@ def main():
     grid_rows = math.ceil(video_size[1] / (square_size + gap)) + 1
     
     grid_coords = [(c, r) for c in range(grid_cols) for r in range(grid_rows)]
-    random.shuffle(grid_coords)
+    order = grid_cfg.get("order", "random").lower().replace("-", "_")
+    
+    if order == "top_to_bottom":
+        grid_coords.sort(key=lambda x: (x[1], x[0]))
+    elif order == "bottom_to_top":
+        grid_coords.sort(key=lambda x: (-x[1], x[0]))
+    elif order == "left_to_right":
+        grid_coords.sort(key=lambda x: (x[0], x[1]))
+    elif order == "right_to_left":
+        grid_coords.sort(key=lambda x: (-x[0], x[1]))
+    else: # random
+        random.shuffle(grid_coords)
     
     total_photos = len(grid_coords)
     
