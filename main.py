@@ -7,10 +7,12 @@ import atexit
 import shutil
 import concurrent.futures
 import numpy as np
+import math
 from PIL import Image, ImageFilter, ImageDraw, ImageFont, ImageOps
-from moviepy import ImageClip, CompositeVideoClip, ColorClip, VideoClip
+from moviepy import ImageClip, CompositeVideoClip, ColorClip, VideoClip, AudioFileClip
 from svglib.svglib import svg2rlg
 from reportlab.graphics import renderPM
+import librosa
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Configurable Video Generator")
@@ -23,17 +25,16 @@ def parse_arguments():
     parser.add_argument("--width", type=int, help="Video width")
     parser.add_argument("--height", type=int, help="Video height")
     parser.add_argument("--fps", type=int, help="Frames per second")
+    parser.add_argument("--target-duration", type=float, help="Target duration of the video in seconds")
+    parser.add_argument("--audio", type=str, help="Path to an audio file for beat syncing")
     parser.add_argument("--appear-interval", type=float, help="Seconds between photo appearance")
     parser.add_argument("--hold-duration", type=float, help="Seconds to hold the final shape")
     parser.add_argument("--square-size", type=int, help="Size of grid squares")
     parser.add_argument("--gap", type=int, help="Gap between grid squares")
-    parser.add_argument("--grid-cols", type=int, help="Grid columns")
-    parser.add_argument("--grid-rows", type=int, help="Grid rows")
-    parser.add_argument("--font-number", type=str, help="Font file for the large number")
-    parser.add_argument("--font-number-size", type=int, help="Font size for the large number")
+    parser.add_argument("--font-cutout", type=str, help="Font file for the large cutout text")
     parser.add_argument("--font-text", type=str, help="Font file for the bottom text")
     parser.add_argument("--font-text-size", type=int, help="Font size for the bottom text")
-    parser.add_argument("--number", type=str, help="The massive cutout text")
+    parser.add_argument("--cutout-text", type=str, help="The massive cutout text")
     parser.add_argument("--text", type=str, help="The text at the bottom. Use \\n for newlines.")
     parser.add_argument("--text-color", type=str, help="Color of the text")
     parser.add_argument("--blur-radius", type=int, help="Background blur radius")
@@ -56,13 +57,12 @@ def load_config(args):
         "hold_duration": 3.0,
         "square_size": 215,
         "gap": 5,
-        "grid_cols": 6,
-        "grid_rows": 6,
-        "font_number": "AlfaSlabOne-Regular.ttf",
-        "font_number_size": 1500,
+        "target_duration": 10.0,
+        "audio": None,
+        "font_cutout": "AlfaSlabOne-Regular.ttf",
         "font_text": r"fonts\Lavishly_Yours\LavishlyYours-Regular.ttf",
         "font_text_size": 108,
-        "number": "3",
+        "cutout_text": "3",
         "text": "Happy\nAnniversary",
         "text_color": "#FFB7CE",
         "blur_radius": 10,
@@ -89,7 +89,7 @@ def load_config(args):
     # Resolve paths relative to the config file's directory to make it robust across OS and working directories
     if args.config:
         config_dir = os.path.dirname(os.path.abspath(args.config))
-        path_keys = ['image_dir', 'font_number', 'font_text', 'svg_file']
+        path_keys = ['image_dir', 'font_cutout', 'font_text', 'svg_file', 'audio']
         for k in path_keys:
             if k in config and config[k] and not os.path.isabs(config[k]):
                 config[k] = os.path.join(config_dir, config[k])
@@ -188,28 +188,49 @@ def create_background_mask(config):
             svg_file = None
             
     if not svg_file or not os.path.exists(svg_file):
+        cutout_text = str(config.get("cutout_text", "3"))
+        cutout_text = cutout_text.replace('\\n', '\n')
+        font_path = config.get("font_cutout", "AlfaSlabOne-Regular.ttf")
+        
+        target_width = video_size[0] * 0.90
+        target_height = video_size[1] * 0.70
+        
         try:
-            font_large = ImageFont.truetype(config["font_number"], size=config["font_number_size"])
+            base_size = 100
+            font_large = ImageFont.truetype(font_path, size=base_size)
+            bbox = mask_draw.textbbox((0, 0), cutout_text, font=font_large)
+            w = bbox[2] - bbox[0]
+            h = bbox[3] - bbox[1]
+            
+            if w > 0 and h > 0:
+                scale_ratio = min(target_width / w, target_height / h)
+                optimal_size = int(base_size * scale_ratio)
+                font_large = ImageFont.truetype(font_path, size=optimal_size)
+                
+                bbox = mask_draw.textbbox((0, 0), cutout_text, font=font_large)
+                while (bbox[2] - bbox[0] > target_width or bbox[3] - bbox[1] > target_height) and optimal_size > 10:
+                    optimal_size -= 20
+                    font_large = ImageFont.truetype(font_path, size=optimal_size)
+                    bbox = mask_draw.textbbox((0, 0), cutout_text, font=font_large)
+            else:
+                font_large = ImageFont.truetype(font_path, size=1500)
         except IOError:
             print("Warning: Could not load thick font for cutout. Using default.")
             font_large = ImageFont.load_default()
 
-        # Draw the massive cutout text
-        text_number = str(config["number"])
-        text_number = text_number.replace('\\n', '\n')
-        
-        bbox_num = mask_draw.textbbox((0, 0), text_number, font=font_large)
+        # Re-calculate final bbox to center properly
+        bbox_num = mask_draw.textbbox((0, 0), cutout_text, font=font_large)
         w_num = bbox_num[2] - bbox_num[0]
         h_num = bbox_num[3] - bbox_num[1]
         
         x_num = (video_size[0] - w_num) / 2
         y_num = (video_size[1] - h_num) / 2 - bbox_num[1] - 300 
         
-        mask_draw.multiline_text((x_num, y_num), text_number, font=font_large, fill=0, align="center")
+        mask_draw.multiline_text((x_num, y_num), cutout_text, font=font_large, fill=0, align="center")
 
         if border_width > 0:
             border_width_adjusted = border_width * 2 
-            img_draw.multiline_text((x_num, y_num), text_number, font=font_large, fill=(0,0,0), stroke_width=border_width_adjusted, stroke_fill=border_color, align="center")
+            img_draw.multiline_text((x_num, y_num), cutout_text, font=font_large, fill=(0,0,0), stroke_width=border_width_adjusted, stroke_fill=border_color, align="center")
 
     # Draw bottom text
     raw_text = str(config["text"]).replace('\\n', '\n')
@@ -268,18 +289,35 @@ def main():
     bg_path_temp = os.path.join(temp_dir, "temp_bg_mask.png")
     bg_img.save(bg_path_temp)
     
-    grid_cols = config["grid_cols"]
-    grid_rows = config["grid_rows"]
     square_size = config["square_size"]
     gap = config["gap"]
     video_size = (config["width"], config["height"])
+    
+    grid_cols = math.ceil(video_size[0] / (square_size + gap))
+    grid_rows = math.ceil(video_size[1] / (square_size + gap))
     
     grid_coords = [(c, r) for c in range(grid_cols) for r in range(grid_rows)]
     random.shuffle(grid_coords)
     
     total_photos = len(grid_coords)
-    total_duration = total_photos * config["appear_interval"] + config["hold_duration"]
     
+    reveal_duration = float(config.get("target_duration") or 10.0)
+    total_duration = reveal_duration + config["hold_duration"]
+    config["appear_interval"] = max(0.01, reveal_duration / total_photos)
+    
+    audio_clip = None
+    beat_times = []
+    
+    if config.get("audio") and os.path.exists(config["audio"]):
+        print(f"Loading audio and detecting beats from {config['audio']} for {reveal_duration} seconds...")
+        y, sr = librosa.load(config["audio"], duration=reveal_duration)
+        tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+        beat_times = librosa.frames_to_time(beat_frames, sr=sr).tolist()
+        
+        audio_file = AudioFileClip(config["audio"])
+        audio_duration = min(total_duration, audio_file.duration)
+        audio_clip = audio_file.subclipped(0, audio_duration)
+        
     # Base black layer
     base_clip = ColorClip(size=video_size, color=(0,0,0)).with_duration(total_duration)
     clips = [base_clip]
@@ -330,6 +368,11 @@ def main():
     wall_img = Image.open(bg_path_temp).convert("RGBA")
     
     loaded_photos = []
+    
+    photos_per_beat = 1
+    if audio_clip and beat_times:
+        photos_per_beat = math.ceil(len(processed_images) / max(1, len(beat_times)))
+
     for i, temp_name in processed_images:
         col, row = grid_coords[i]
         
@@ -340,11 +383,19 @@ def main():
         if x_pos + square_size <= 0 or y_pos + square_size <= 0 or x_pos >= video_size[0] or y_pos >= video_size[1]:
             continue
             
+        if audio_clip and beat_times:
+            beat_idx = min(i // photos_per_beat, len(beat_times) - 1)
+            start_time = beat_times[beat_idx]
+            # Optional stagger effect for grouped tiles
+            start_time += (i % photos_per_beat) * 0.005 
+        else:
+            start_time = i * config["appear_interval"]
+            
         loaded_photos.append({
             'img': Image.open(temp_name).convert("RGB"),
             'x': int(x_pos),
             'y': int(y_pos),
-            'start_time': i * config["appear_interval"]
+            'start_time': start_time
         })
 
     def make_frame(t):
@@ -362,7 +413,9 @@ def main():
 
     print("Rendering video... This will be blisteringly fast now!")
     final_video = VideoClip(make_frame, duration=total_duration)
-    final_video.write_videofile(config["output"], fps=config["fps"], codec="libx264", audio=False, threads=os.cpu_count())
+    if audio_clip:
+        final_video = final_video.with_audio(audio_clip)
+    final_video.write_videofile(config["output"], fps=config["fps"], codec="libx264", audio_codec="aac", threads=os.cpu_count())
     
     print(f"\nDone! Your video is ready at: {os.path.abspath(config['output'])}")
 

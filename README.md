@@ -27,7 +27,7 @@ Perfect for creating aesthetic anniversary videos, birthday reels, or customized
 1. Ensure you have [Python 3.7+](https://www.python.org/) installed.
 2. If using `uv`, the dependencies are managed for you. Otherwise, install the required Python dependencies:
    ```bash
-   pip install pillow moviepy numpy svglib reportlab
+   pip install pillow moviepy numpy svglib reportlab librosa
    ```
 
 ## Usage
@@ -40,7 +40,7 @@ python main.py --config config.json
 
 You can also override any specific setting directly via the command line:
 ```bash
-python main.py --config config.json --number "5" --text "Happy\nBirthday"
+python main.py --config config.json --cutout-text "5" --text "Happy\nBirthday"
 ```
 
 ## Configuration Options
@@ -59,13 +59,12 @@ Below is the list of all available options you can define in your `config.json` 
 | `hold_duration` | float | Time in seconds to hold the video after the final photo appears (default: `3.0`). |
 | `square_size` | integer | Width/height in pixels of each photo tile in the background grid. |
 | `gap` | integer | Space in pixels between each photo tile in the grid. |
-| `grid_cols` | integer | Number of columns in the photo grid. |
-| `grid_rows` | integer | Number of rows in the photo grid. |
-| `font_number` | string | Path to the `.ttf` font file used for the massive cutout mask. |
-| `font_number_size`| integer | Font size for the massive cutout mask (e.g., `1500`). |
+| `target_duration` | float | Target duration of the video in seconds (default: `10.0`). The script will intelligently lay out photos to meet this duration. |
+| `audio` | string | Optional path to an audio track to attach. If provided, the photo tiles will be synced to pop on the musical beats automatically! |
+| `font_cutout` | string | Path to the `.ttf` font file used for the massive cutout mask. |
 | `font_text` | string | Path to the `.ttf` font file used for the bottom text. |
 | `font_text_size` | integer | Font size for the bottom text. |
-| `number` | string | The character(s) or text to cut out from the center of the wall. |
+| `cutout_text` | string | The character(s) or text to cut out from the center of the wall. |
 | `text` | string | The text to draw at the bottom of the video. Use `\n` to insert line breaks. |
 | `text_color` | string | Hex code for the bottom text color (e.g., `#FFB7CE`). |
 | `blur_radius` | integer | Gaussian blur radius applied to the background wall (default: `10`). |
@@ -87,13 +86,12 @@ Below is the list of all available options you can define in your `config.json` 
     "hold_duration": 3.0,
     "square_size": 215,
     "gap": 5,
-    "grid_cols": 6,
-    "grid_rows": 6,
-    "font_number": "AlfaSlabOne-Regular.ttf",
-    "font_number_size": 1500,
+    "target_duration": 10.0,
+    "audio": "song.mp3",
+    "font_cutout": "AlfaSlabOne-Regular.ttf",
     "font_text": "fonts\\Lavishly_Yours\\LavishlyYours-Regular.ttf",
     "font_text_size": 108,
-    "number": "3",
+    "cutout_text": "3",
     "text": "Hello\nWorld",
     "text_color": "#FFB7CE",
     "blur_radius": 10
