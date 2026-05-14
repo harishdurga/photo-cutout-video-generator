@@ -41,3 +41,6 @@ temp*
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Output videos
+*.mp4
