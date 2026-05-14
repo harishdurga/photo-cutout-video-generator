@@ -99,8 +99,8 @@ def load_config(args):
             else:
                 config["bg"]["image"] = os.path.join(config_dir, config["bg"]["image"])
                 
-        # cutout font/svg
-        for k in ["font", "svg_file"]:
+        # cutout font/svg/file
+        for k in ["font", "svg_file", "file"]:
             if config["cutout"].get(k) and not os.path.isabs(config["cutout"][k]):
                 config["cutout"][k] = os.path.join(config_dir, config["cutout"][k])
                 
@@ -248,32 +248,49 @@ def create_background_mask(config):
     
     cutout_center_x, cutout_center_y = video_size[0]//2, video_size[1]//2
     
-    if cutout_cfg["type"] == "svg" and cutout_cfg.get("svg_file") and os.path.exists(cutout_cfg["svg_file"]):
-        drawing = svg2rlg(cutout_cfg["svg_file"])
-        if drawing:
-            svg_img = renderPM.drawToPIL(drawing)
-            alpha_channel = ImageOps.invert(svg_img.convert('L'))
-            bbox = alpha_channel.getbbox()
-            if bbox:
-                alpha_channel = alpha_channel.crop(bbox)
+    if cutout_cfg["type"] in ["svg", "image"]:
+        file_path = cutout_cfg.get("file", cutout_cfg.get("svg_file"))
+        if file_path and os.path.exists(file_path):
+            alpha_channel = None
+            if cutout_cfg["type"] == "svg":
+                drawing = svg2rlg(file_path)
+                if drawing:
+                    svg_img = renderPM.drawToPIL(drawing)
+                    alpha_channel = ImageOps.invert(svg_img.convert('L'))
+            else:
+                img_mask = Image.open(file_path)
+                if img_mask.mode == 'RGBA':
+                    alpha = img_mask.split()[3]
+                    if alpha.getextrema() == (255, 255):
+                        alpha_channel = ImageOps.invert(img_mask.convert('L'))
+                    else:
+                        alpha_channel = alpha
+                else:
+                    alpha_channel = ImageOps.invert(img_mask.convert('L'))
             
-            max_w, max_h = video_size[0] * 0.85, video_size[1] * 0.65
-            scale = min(max_w / alpha_channel.width, max_h / alpha_channel.height)
-            new_size = (int(alpha_channel.width * scale), int(alpha_channel.height * scale))
-            alpha_channel = alpha_channel.resize(new_size, Image.Resampling.LANCZOS)
-            
-            x_num, y_num = calculate_position(cutout_cfg.get("position", {}), new_size[0], new_size[1], video_size[0], video_size[1])
-            cutout_center_x, cutout_center_y = x_num + new_size[0]//2, y_num + new_size[1]//2
-            
-            if border_width > 0:
-                filter_size = border_width * 2 + 1
-                dilated_alpha = alpha_channel.filter(ImageFilter.MaxFilter(filter_size))
-                border_layer = Image.new('RGB', new_size, color=border_color)
-                border_layer.putalpha(dilated_alpha)
-                img.paste(border_layer, (x_num, y_num), border_layer)
-            
-            cutout_shape = Image.new('L', new_size, color=0)
-            mask.paste(cutout_shape, (x_num, y_num), alpha_channel)
+            if alpha_channel:
+                bbox = alpha_channel.getbbox()
+                if bbox:
+                    alpha_channel = alpha_channel.crop(bbox)
+                
+                max_w, max_h = video_size[0] * 0.85, video_size[1] * 0.65
+                scale = min(max_w / alpha_channel.width, max_h / alpha_channel.height)
+                scale *= cutout_cfg.get("scale", 1.0)
+                new_size = (int(alpha_channel.width * scale), int(alpha_channel.height * scale))
+                alpha_channel = alpha_channel.resize(new_size, Image.Resampling.LANCZOS)
+                
+                x_num, y_num = calculate_position(cutout_cfg.get("position", {}), new_size[0], new_size[1], video_size[0], video_size[1])
+                cutout_center_x, cutout_center_y = x_num + new_size[0]//2, y_num + new_size[1]//2
+                
+                if border_width > 0:
+                    filter_size = border_width * 2 + 1
+                    dilated_alpha = alpha_channel.filter(ImageFilter.MaxFilter(filter_size))
+                    border_layer = Image.new('RGB', new_size, color=border_color)
+                    border_layer.putalpha(dilated_alpha)
+                    img.paste(border_layer, (x_num, y_num), border_layer)
+                
+                cutout_shape = Image.new('L', new_size, color=0)
+                mask.paste(cutout_shape, (x_num, y_num), alpha_channel)
     else:
         # Text cutout
         cutout_text = str(cutout_cfg.get("text", "")).replace('\\n', '\n')

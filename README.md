@@ -9,7 +9,7 @@ A highly customizable, programmatic video generator that creates stunning vertic
 Perfect for creating aesthetic anniversary videos, birthday reels, or customized status updates for Instagram, WhatsApp, and TikTok.
 
 ## Features
-- **Dynamic Cutout Masks**: Specify any text, number (e.g., "3"), or provide an SVG file to be cut out of the background.
+- **Dynamic Cutout Masks**: Specify any text, number (e.g., "3"), provide an SVG file, or use a PNG image (with transparency or white background) to be cut out of the background.
 - **Advanced Backgrounds**: Choose between a solid color, a linear gradient, or a background image (with cover, contain, or stretch sizing options).
 - **Positioning Engine**: Precisely position your cutout mask and bottom text layer using `x`, `y` anchors (e.g., `center`, `bottom`) paired with detailed margin controls (`margin_top`, `margin_bottom`, etc.).
 - **Beat-Sync Animation**: Synchronize the "pop-in" of photos perfectly to the beat of an attached audio track.
@@ -78,7 +78,7 @@ Below is an example of the structured `config.json` file. The schema is deeply n
     "type": "text",
     "text": "3",
     "font": "AlfaSlabOne-Regular.ttf",
-    "svg_file": null,
+    "file": null,
     "border_color": "#FFB7CE",
     "border_width": 0,
     "position": {
