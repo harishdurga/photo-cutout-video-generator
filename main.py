@@ -485,12 +485,15 @@ def main():
     
     audio_clip = None
     beat_times = []
+    beat_strengths = []
     
     if config.get("audio") and os.path.exists(config["audio"]):
         print(f"Loading audio and detecting beats from {config['audio']}...")
         y, sr = librosa.load(config["audio"], duration=reveal_duration)
-        tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+        onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+        tempo, beat_frames = librosa.beat.beat_track(onset_envelope=onset_env, sr=sr)
         beat_times = librosa.frames_to_time(beat_frames, sr=sr).tolist()
+        beat_strengths = onset_env[beat_frames].tolist()
         
         audio_file = AudioFileClip(config["audio"])
         audio_duration = min(total_duration, audio_file.duration)
@@ -548,9 +551,44 @@ def main():
     
     loaded_photos = []
     
-    photos_per_beat = 1
-    if audio_clip and beat_times:
-        photos_per_beat = math.ceil(len(processed_images) / max(1, len(beat_times)))
+    image_beat_map = []
+    photos_per_beat_counts = []
+    
+    if audio_clip and beat_times and beat_strengths:
+        min_strength = min(beat_strengths) if beat_strengths else 0
+        max_strength = max(beat_strengths) if beat_strengths else 1
+        range_strength = max_strength - min_strength if max_strength > min_strength else 1
+        
+        weights = []
+        normalized_strengths = []
+        for s in beat_strengths:
+            norm_s = (s - min_strength) / range_strength
+            normalized_strengths.append(norm_s)
+            
+            # Non-linear weighting (power of 3) to exaggerate major beats
+            weight = 0.2 + (norm_s ** 3) * 3.0 
+            weights.append(weight)
+            
+        total_weight = sum(weights)
+        total_images_to_assign = len(processed_images)
+        
+        for w in weights:
+            count = int((w / total_weight) * total_images_to_assign)
+            photos_per_beat_counts.append(count)
+            
+        assigned = sum(photos_per_beat_counts)
+        remaining = total_images_to_assign - assigned
+        
+        if remaining > 0:
+            import numpy as np
+            sorted_indices = np.argsort(weights)[::-1]
+            for j in range(remaining):
+                photos_per_beat_counts[sorted_indices[j % len(weights)]] += 1
+                
+        for beat_idx, count in enumerate(photos_per_beat_counts):
+            image_beat_map.extend([beat_idx] * count)
+
+    photo_to_beat_idx = {}
 
     for i, temp_name in processed_images:
         col, row = grid_coords[i]
@@ -561,10 +599,23 @@ def main():
         if x_pos + square_size <= 0 or y_pos + square_size <= 0 or x_pos >= video_size[0] or y_pos >= video_size[1]:
             continue
             
-        if audio_clip and beat_times:
-            beat_idx = min(i // photos_per_beat, len(beat_times) - 1)
+        beat_strength_norm = 0.0
+        if audio_clip and beat_times and i < len(image_beat_map):
+            beat_idx = image_beat_map[i]
             start_time = beat_times[beat_idx]
-            start_time += (i % photos_per_beat) * 0.005 
+            
+            if beat_idx < len(normalized_strengths):
+                beat_strength_norm = normalized_strengths[beat_idx]
+            
+            idx_in_beat = photo_to_beat_idx.get(beat_idx, 0)
+            photo_to_beat_idx[beat_idx] = idx_in_beat + 1
+            
+            total_in_beat = photos_per_beat_counts[beat_idx]
+            
+            # Stagger them slightly, making it faster/explosive for major beats
+            if total_in_beat > 1:
+                stagger_window = 0.15 - (beat_strength_norm * 0.1) # 150ms -> 50ms
+                start_time += idx_in_beat * (stagger_window / total_in_beat)
         else:
             start_time = i * grid_cfg["appear_interval"]
             
@@ -572,18 +623,28 @@ def main():
             'img': Image.open(temp_name).convert("RGB"),
             'x': int(x_pos),
             'y': int(y_pos),
-            'start_time': start_time
+            'start_time': start_time,
+            'beat_strength_norm': beat_strength_norm
         })
 
     def make_frame(t):
         frame = Image.new('RGB', video_size, (0, 0, 0))
         for photo in loaded_photos:
-            if t >= photo['start_time'] + 0.16:
-                frame.paste(photo['img'], (photo['x'], photo['y']))
-            elif t >= photo['start_time']:
+            if t >= photo['start_time']:
                 dt = t - photo['start_time']
-                if (0 <= dt < 0.041) or (0.08 <= dt < 0.121):
+                is_high_beat = photo.get('beat_strength_norm', 0.0) > 0.6
+                
+                if dt >= 0.16:
                     frame.paste(photo['img'], (photo['x'], photo['y']))
+                else:
+                    visible = (0 <= dt < 0.041) or (0.08 <= dt < 0.121)
+                    if visible:
+                        # For major beats, add a white flash on the initial tubelight flicker
+                        if is_high_beat and dt < 0.041:
+                            flash_img = Image.new('RGB', photo['img'].size, (255, 255, 255))
+                            frame.paste(flash_img, (photo['x'], photo['y']))
+                        else:
+                            frame.paste(photo['img'], (photo['x'], photo['y']))
         
         frame.paste(wall_img, (0, 0), wall_img)
         return np.array(frame)
