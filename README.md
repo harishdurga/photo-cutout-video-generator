@@ -12,7 +12,7 @@ Perfect for creating aesthetic anniversary videos, birthday reels, or customized
 - **Dynamic Cutout Masks**: Specify any text, number (e.g., "3"), provide an SVG file, or use a PNG image (with transparency or white background) to be cut out of the background.
 - **Advanced Backgrounds**: Choose between a solid color, a linear gradient, or a background image (with cover, contain, or stretch sizing options).
 - **Positioning Engine**: Precisely position your cutout mask and bottom text layer using `x`, `y` anchors (e.g., `center`, `bottom`) paired with detailed margin controls (`margin_top`, `margin_bottom`, etc.).
-- **Beat-Sync Animation**: Synchronize the "pop-in" of photos perfectly to the beat of an attached audio track.
+- **Beat-Sync & Dynamic Impact**: Synchronize the "pop-in" of photos to the audio track's beat. The engine analyzes beat strength, triggering explosive photo drops and bright visual flashes on major beats (drops), while subtly revealing tiles on softer beats.
 - **Tubelight Flicker Animation**: Photos pop into the grid with a cool, randomized fluorescent blinking effect.
 - **Fully Configurable JSON**: Completely control grid sizes, layout, colors, overlays, blur radius, fonts, and duration using a nested JSON configuration file.
 - **EXIF Auto-Correction**: Automatically rotates portrait/landscape photos correctly based on EXIF data.
@@ -80,6 +80,7 @@ Below is an example of the structured `config.json` file. The schema is deeply n
     "text": "3",
     "font": "AlfaSlabOne-Regular.ttf",
     "file": null,
+    "scale": 1.0,
     "border_color": "#FFB7CE",
     "border_width": 0,
     "position": {
@@ -123,6 +124,8 @@ Below is an example of the structured `config.json` file. The schema is deeply n
 - **`bg.type`**: Can be `"image"`, `"solid"`, or `"gradient"`. Depending on the choice, the respective inner properties are used. 
 - **`bg.size`**: Valid only for images. Options include `"cover"`, `"contain"`, and `"stretch"`.
 - **`bg.overlay`**: Adds a color tint to your background. Set `opacity` between `0.0` (invisible) and `1.0` (solid).
-- **`cutout.type`**: Can be `"text"` or `"svg"`. If `"svg"`, `cutout.svg_file` must point to an SVG. If `"text"`, `cutout.text` is used.
+- **`cutout.type`**: Can be `"text"`, `"svg"`, or `"image"`. If `"svg"` or `"image"`, use `cutout.file` to point to your `.svg` or `.png` (transparent or white background) file. If `"text"`, `cutout.text` is used.
+- **`cutout.scale`**: (Optional) For `"svg"` and `"image"` types, a float multiplier (e.g., `1.2` or `0.8`) to finely adjust the final size of the cutout shape.
+- **`cutout.border_width` & `cutout.border_color`**: Add a colored outline to your text or shape cutout (e.g., `border_width: 5`).
 - **`cutout.etched`**: Gives your cutout shape a realistic "3D carved/etched-in" look using configurable inner shadows and highlights.
 - **`position` blocks**: Specify exactly where elements are anchored (`"x"` can be `"center"`, `"left"`, `"right"`; `"y"` can be `"center"`, `"top"`, `"bottom"`). Further offset them using the `margin` properties.
