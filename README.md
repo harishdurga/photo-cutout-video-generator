@@ -124,13 +124,45 @@ Below is an example of the structured `config.json` file. The schema is deeply n
 }
 ```
 
-### Key Settings Explained
-- **`audio` & `target_duration`**: Providing an audio file ensures photos synchronize to the beat of the music! The video will attempt to reach `target_duration` (seconds).
-- **`bg.type`**: Can be `"image"`, `"solid"`, or `"gradient"`. Depending on the choice, the respective inner properties are used. 
-- **`bg.size`**: Valid only for images. Options include `"cover"`, `"contain"`, and `"stretch"`.
-- **`bg.overlay`**: Adds a color tint to your background. Set `opacity` between `0.0` (invisible) and `1.0` (solid).
-- **`cutout.type`**: Can be `"text"`, `"svg"`, or `"image"`. If `"svg"` or `"image"`, use `cutout.file` to point to your `.svg` or `.png` (transparent or white background) file. If `"text"`, `cutout.text` is used.
-- **`cutout.scale`**: (Optional) For `"svg"` and `"image"` types, a float multiplier (e.g., `1.2` or `0.8`) to finely adjust the final size of the cutout shape.
-- **`cutout.border_width` & `cutout.border_color`**: Add a colored outline to your text or shape cutout (e.g., `border_width: 5`).
-- **`cutout.etched`**: Gives your cutout shape a realistic "3D carved/etched-in" look using configurable inner shadows and highlights.
-- **`position` blocks**: Specify exactly where elements are anchored (`"x"` can be `"center"`, `"left"`, `"right"`; `"y"` can be `"center"`, `"top"`, `"bottom"`). Further offset them using the `margin` properties.
+### Configuration Reference
+
+| JSON Key | Type | Description |
+|----------|------|-------------|
+| **`output`** | `String` | Filename and path for the final rendered video (e.g., `"output.mp4"`). |
+| **`width` / `height`** | `Integer` | The resolution of the video in pixels (e.g., 1080x1920 for vertical). |
+| **`fps`** | `Integer` | Frames per second for the rendered video. |
+| **`target_duration`** | `Float` | The target duration of the photo reveal sequence in seconds. |
+| **`hold_duration`** | `Float` | Extra duration in seconds to pause at the end after all photos have appeared. |
+| **`audio`** | `String` | Path to an audio file (`.mp3`, `.wav`) to sync the photo pop-ins to the beat. |
+| **`grid.image_dir`** | `String` | Path to the directory containing the photos. |
+| **`grid.square_size`** | `Integer` | Size of each individual square photo tile in pixels. |
+| **`grid.gap`** | `Integer` | Spacing gap between the photo tiles in pixels. |
+| **`grid.appear_interval`** | `Float` | Time in seconds between photo appearances (used if no audio is provided). |
+| **`grid.order`** | `String` | Appearance order: `"random"`, `"top_to_bottom"`, `"bottom_to_top"`, `"left_to_right"`, `"right_to_left"`. |
+| **`bg.type`** | `String` | Background type: `"image"`, `"solid"`, or `"gradient"`. |
+| **`bg.image`** | `String` | Path to the background image (used if `bg.type` is `"image"`). |
+| **`bg.size`** | `String` | Sizing method for background image: `"cover"`, `"contain"`, or `"stretch"`. |
+| **`bg.color`** | `String` | Hex color for solid backgrounds. |
+| **`bg.gradient.start / end`**| `String` | Top and bottom hex colors for the gradient background. |
+| **`bg.blur_radius`** | `Integer` | Gaussian blur radius applied to the background (0 to disable). |
+| **`bg.overlay.color`** | `String` | Hex color for the background overlay tint. |
+| **`bg.overlay.opacity`** | `Float` | Opacity of the background overlay (`0.0` invisible to `1.0` solid). |
+| **`cutout.type`** | `String` | The type of mask to create: `"text"`, `"svg"`, or `"image"`. |
+| **`cutout.text`** | `String` | The text string to use as a cutout (if type is `"text"`). |
+| **`cutout.font`** | `String` | Path to a `.ttf` font file for the text cutout. |
+| **`cutout.file`** | `String` | Path to a `.svg` or `.png` file (if type is `"svg"` or `"image"`). |
+| **`cutout.scale`** | `Float` | Size multiplier for SVG/PNG shape cutouts (e.g., `1.2` or `0.8`). |
+| **`cutout.border_color`** | `String` | Hex color for the border drawn around the cutout shape or text. |
+| **`cutout.border_width`** | `Integer` | Thickness of the cutout border in pixels (set to `0` to disable). |
+| **`cutout.position.x / y`** | `String` | Positional anchors: `"center"`, `"left"`, `"right"`, `"top"`, `"bottom"`. |
+| **`cutout.position.margin_*`**| `Integer` | Additional offset margins (`margin_top`, `margin_bottom`, `margin_left`, `margin_right`). |
+| **`cutout.etched.enabled`** | `Boolean` | Turn the inner shadow/highlight realistic "carved 3D" effect on or off. |
+| **`cutout.etched.shadow_blur`** | `Integer` | Blur radius for the etched shadow. |
+| **`cutout.etched.offset_x/y`** | `Integer` | Offset distance for the etched shadow and highlight. |
+| **`cutout.etched.shadow_*`** | `String/Float`| Hex color and opacity for the inner shadow. |
+| **`cutout.etched.highlight_*`**| `String/Float`| Hex color and opacity for the inner highlight. |
+| **`text_layer.text`** | `String` | Optional text displayed globally on top of the final video. |
+| **`text_layer.font`** | `String` | Path to a `.ttf` font file for the text overlay. |
+| **`text_layer.font_size`** | `Integer` | Font size for the text overlay. |
+| **`text_layer.color`** | `String` | Hex color for the text overlay. |
+| **`text_layer.position.*`** | `Object` | Positioning rules for the text layer (same schema as `cutout.position`). |
